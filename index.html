@@ -1,0 +1,122 @@
+<!doctype html>
+<html class="no-js" lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Free2</title>
+    <meta name="description" content="">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="manifest" href="site.webmanifest">
+    <link rel="apple-touch-icon" href="icon.png">
+    <meta name="theme-color" content="#fafafa">
+</head>
+<body>
+  <label for="search">Search</label>
+  <input type="text" id="search" onkeyup="highlight()" placeholder="Search">
+  <h2> Posts </h2>
+  <div class="posts"></div>
+ 
+  <script type="application/javascript">
+
+  const cacheName = "free2App";
+  const urlPosts = "https://jsonplaceholder.typicode.com/posts";
+  const urlUsers = "https://jsonplaceholder.typicode.com/users";
+
+  const highlight = () => {
+    let text = document.getElementById("search").value;
+    [].forEach.call(document.querySelectorAll('p'), function (val) {
+      val.innerHTML = val.innerText;
+      if (val.innerText.includes(text)) {
+        let content = val.innerText;
+        val.innerHTML = content.replace(text, "<mark>" + text + "</mark>");
+      }
+
+    });
+  };
+
+  const findUsername = (item , users) => {
+    const user = users.find(user => user.id === item.userId);
+    return `<li>
+                <p>${item.title}</p>
+                <p>${item.body}</p>
+                <p>${user.username}</p>
+                <button onclick=editCachePost(${item.id})>Clear from cache</button>
+             </li>`
+  }
+
+  const renderPost = (data , users) => {
+    const posts = data.map(function (item) {
+      return findUsername(item , users);
+    }).join("");
+    return `<ul>${posts}</ul>`
+  };
+
+  const getCachedData = async (cacheName , url) => {
+    const cacheStorage = await caches.open(cacheName);
+    const cachedResponse = await cacheStorage.match(url);
+
+    if (!cachedResponse || !cachedResponse.ok) {
+      return false;
+    }
+
+    return await cachedResponse.json();
+  };
+
+  const getData = async (url , name) => {
+    let cachedData = await getCachedData(cacheName , url);
+    if (cachedData) {
+      return cachedData;
+    }
+    const cacheStorage = await caches.open(cacheName);
+    await cacheStorage.add(url);
+    cachedData = await getCachedData(cacheName , url);
+    return cachedData;
+  };
+
+  const editCachePost = async (postId) => {
+    const users = await getData(urlUsers , "users");
+    const cachedPost = await getData(urlPosts , "posts");
+
+    if ( Object.entries(cachedPost).length === 0
+      && cachedPost.constructor === Object ){
+      caches.delete(cacheName);
+    }
+
+    const newPosts = cachedPost.filter(function(item) {
+      return item.id !== postId
+    });
+
+    await caches.open(cacheName).then(cache => {
+      cache.put(urlPosts, new Response(JSON.stringify(newPosts),
+        { headers: { "Content-Type": "application/json" } }
+      ))
+    })
+    listOfPosts.innerHTML = "";
+    listOfPosts.innerHTML = renderPost(newPosts , users);
+
+  };
+
+
+  const app = async () => {
+    try {
+      const users = await getData(urlUsers , "users");
+      const posts = await getData(urlPosts , "posts");
+
+      listOfPosts.innerHTML = renderPost(posts , users);
+
+    } catch (error) {
+      console.error({error});
+    }
+  }
+
+  const listOfPosts = document.querySelector(".posts");
+  listOfPosts.innerHTML = "<p>Loading...</p>";
+
+  if("caches" in window){
+    caches.open(cacheName).then(cache => {
+      return cache.addAll([urlPosts, urlUsers])
+    })
+    app();
+  }
+</script>
+</body>
+</html>
